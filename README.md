@@ -1321,6 +1321,19 @@ Prediction Visualization
 
 # Day04 : 正式训练
 ## 1.修改dataste.csv的路径---路径可移植性
+## 2.上传git：
+git init
+git status
+git add .  # 表示把这些修改放进“准备提交区”
+git commit -m "Day04: implement UNet training fundamentals and Dice BCE loss"
 
+git remote add origin https://github.com/你hongtingjiang-del/breast-ultrasound-segmentation.git
 
+git remote -v  #检查是否连接成功
+#提交
+git branch -M main
+git push -u origin main
+
+## 3.上传数据集（scp或者使用filezillia）---scp更快
+scp -P 24758 "D:\desktop\work-projects\breast-ultrasound-segmentation\data\Dataset_BUSI_with_GT.zip" root@connect.westb.seetacloud.com:/root/
 
