@@ -272,7 +272,7 @@ class BUSIDataset(Dataset):
 
         return image_path
 
-    def __getitem__(self, index):
+    def __getitem__(self, idx):
         """
         获取第 index 个样本。
 
