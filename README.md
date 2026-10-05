@@ -1365,3 +1365,24 @@ ls -l        # 详细列表：权限、大小、修改时间
 ls -a        # 显示隐藏文件（以 . 开头的，如 .git）
 ls -la       # 详细 + 隐藏文件，最常用组合
 ls -lh       # 详细列表，大小用 K/M/G 显示，更易读
+
+
+
+### 运行train
+cd ~/projects/breast-ultrasound-segmentation
+python -m src.train --data_root ~/datasets/BUSI/Dataset_BUSI_with_GT --epochs 1 --batch_size 4 --num_workers 2
+
+### 正式train运行命令，注意不是train.py，保存对应的日志，并在屏幕上显示
+python -m src.train \
+  --data_root ~/datasets/BUSI/Dataset_BUSI_with_GT \
+  --epochs 50 \
+  --batch_size 8 \
+  --lr 1e-4 \
+  --patience 10 \
+  --num_workers 4 \
+  --save_dir results/baseline 2>&1 | tee train.log
+
+  ### 使用scp下载训练好的模型
+首先压缩文件夹：tar -czf baseline_results.tar.gz results/baseline
+然后使用scp命令下载，在powershell里面：
+  scp -P 24758 root@connect.westb.seetacloud.com:~/projects/breast-ultrasound-segmentation/baseline_results.tar.gz "D:\desktop\work-projects\breast-ultrasound-segmentation\results\"
