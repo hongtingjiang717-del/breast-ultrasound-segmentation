@@ -1337,3 +1337,31 @@ git push -u origin main
 ## 3.上传数据集（scp或者使用filezillia）---scp更快
 scp -P 24758 "D:\desktop\work-projects\breast-ultrasound-segmentation\data\Dataset_BUSI_with_GT.zip" root@connect.westb.seetacloud.com:/root/
 
+
+#### 问题：
+# 1. 软撤销：commit 取消，改动回到暂存区，文件都还在
+git reset --soft HEAD~1
+
+# 2. 把压缩包从暂存区拿出来（不删除本地文件）
+git restore --staged data/Dataset_BUSI_with_GT.zip
+
+# 3. 确认暂存区里没有它了
+git status
+
+# 4. 重新提交（此时只包含你要的文件）
+git commit -m "提交说明"
+
+# 5. 推送
+git push
+
+
+### 常用命令
+pwd          # 显示当前所在完整路径
+cd 目录名     # 进入某个目录
+cd ..        # 返回上一级
+cd ~         # 回到用户主目录
+
+ls -l        # 详细列表：权限、大小、修改时间
+ls -a        # 显示隐藏文件（以 . 开头的，如 .git）
+ls -la       # 详细 + 隐藏文件，最常用组合
+ls -lh       # 详细列表，大小用 K/M/G 显示，更易读

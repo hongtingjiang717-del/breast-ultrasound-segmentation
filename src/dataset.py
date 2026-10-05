@@ -197,7 +197,7 @@ class BUSIDataset(Dataset):
 
         self.image_size = image_size
         #如果传入数据根目录，将他转换成path对象
-        self.data_root(
+        self.data_root=(
             Path(data_root)
             if data_root is not None
             else None
