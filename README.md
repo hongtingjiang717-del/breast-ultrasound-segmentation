@@ -1319,7 +1319,7 @@ Prediction Visualization
 8. 得到第一版可以写入简历的实验结果
 
 
-# Day04 : 正式训练
+# Day05 : 正式训练
 ## 1.修改dataste.csv的路径---路径可移植性
 ## 2.上传git：
 git init
@@ -1386,3 +1386,41 @@ python -m src.train \
 首先压缩文件夹：tar -czf baseline_results.tar.gz results/baseline
 然后使用scp命令下载，在powershell里面：
   scp -P 24758 root@connect.westb.seetacloud.com:~/projects/breast-ultrasound-segmentation/baseline_results.tar.gz "D:\desktop\work-projects\breast-ultrasound-segmentation\results\"
+
+
+
+# Day06:训练之后检查
+
+
+## 找到最佳epoch
+(breast_seg) PS D:\desktop\work-projects\breast-ultrasound-segmentation> python -c "import pandas as pd; df = pd.read_csv('results/baseline/history.csv'); best = df.loc[df['val_dice'].idxmax()]; print('Best epoch:', int(best['epoch'])); print('Train Loss:', best['train_loss']); print('Val Loss:', best['val_loss']); print('Val Dice:', best['val_dice']); print('Val IoU:', best['val_iou'])"
+Best epoch: 38
+Train Loss: 0.2425456922828105
+Val Loss: 0.5130691390771133
+Val Dice: 0.7186055412659278
+Val IoU: 0.6261377701392541
+
+## 为什么只有48个epoch?因为设置了提前停止
+(base) PS D:\desktop\work-projects\breast-ultrasound-segmentation> & D:/Anaconda_envs/envs/breast_seg/python.exe d:/desktop/work-projects/breast-ultrasound-segmentation/src/plot_history.py
+   epoch  train_loss  val_loss  val_dice   val_iou
+0      1    1.323266  1.267184  0.374003  0.265534
+1      2    1.123721  1.186228  0.418291  0.307745
+2      3    1.072471  1.092772  0.496884  0.408331
+3      4    1.012991  1.055381  0.527776  0.431144
+4      5    1.001086  1.020877  0.509304  0.407047
+
+Total epochs: 48
+
+### 报错解决（今天遇到很多）
+Traceback (most recent call last):
+  File "d:\desktop\work-projects\breast-ultrasound-segmentation\src\visualize_predictions.py", line 12, in <module>
+    from src.dataset import BUSIDataset
+ModuleNotFoundError: No module named 'src'
+
+问题原因：这是 Python 导入路径问题——直接运行 src/visualize_predictions.py 时，Python 会把 src/ 目录加入 sys.path，而不是项目根目录，所以找不到 src 包。
+解决办法：在命令行直接运行：python -m src.visualize_predictions
+
+## 对 Test Set 的每一张图分别计算 Dice / IoU。
+
+不是只得到：
+Test Dice = 某一个平均值，因为batch可能不均匀吧
