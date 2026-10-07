@@ -163,7 +163,8 @@ class BUSIDataset(Dataset):
         self,
         csv_file,
         image_size=(256, 256),
-        data_root=None
+        data_root=None，
+        transform=None
     ):
         """
         Parameters
@@ -202,6 +203,7 @@ class BUSIDataset(Dataset):
             if data_root is not None
             else None
         )
+        self.transform = transform
 
         # -----------------------------
         # 检查必要字段
@@ -347,30 +349,49 @@ class BUSIDataset(Dataset):
             merged_mask * 255
         )
 
+        # ==========================================
+        # Albumentations 数据增强
+        # ==========================================
 
-        # ==================================================
-        # 5. Resize image
-        # ==================================================
+        if self.transform is  None:
+            # ==================================================
+            # 5. Resize image
+            # ==================================================
 
-        # 原图是连续灰度图，
-        # 使用双线性插值。
-        image = image.resize(
-            self.image_size,
-            resample=Image.Resampling.BILINEAR
-        )
+            # 原图是连续灰度图，
+            # 使用双线性插值。
+            image = image.resize(
+                self.image_size,
+                resample=Image.Resampling.BILINEAR
+            )
 
 
-        # ==================================================
-        # 6. Resize mask
-        # ==================================================
+            # ==================================================
+            # 6. Resize mask
+            # ==================================================
 
-        # mask 是离散标签，
-        # 使用最近邻插值。
-        mask = mask.resize(
-            self.image_size,
-            resample=Image.Resampling.NEAREST
-        )
+            # mask 是离散标签，
+            # 使用最近邻插值。
+            mask = mask.resize(
+                self.image_size,
+                resample=Image.Resampling.NEAREST
+            )
 
+        else:
+            transformed = self.transform(
+
+                image=image_array,
+
+                mask=merged_mask
+            )
+
+            image_array = transformed[
+                "image"
+            ]
+
+            merged_mask = transformed[
+                "mask"
+            ]
 
         # ==================================================
         # 7. PIL → numpy

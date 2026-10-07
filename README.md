@@ -1424,3 +1424,113 @@ ModuleNotFoundError: No module named 'src'
 
 不是只得到：
 Test Dice = 某一个平均值，因为batch可能不均匀吧
+
+而是得到：
+image	class	size_group	Dice	IoU
+benign xxx	benign	small	0.42	0.27
+benign xxx	benign	large	0.91	0.84
+malignant xxx	malignant	medium	0.78	0.65
+...	...	...	...	...
+
+
+有了这个表以后，我们才能真正分析：
+到底是不是小病灶最难？
+
+良性和恶性哪个更难？
+
+最差的病例到底是什么特点？
+
+模型是不是经常漏分？
+
+还是经常把背景误分成病灶？
+
+## 还有一个问题：现在的 0.5 阈值不一定最优
+你当前预测使用：
+pred = (prob >= 0.5).float()
+
+
+也就是：
+Probability ≥ 0.5
+→ Lesion
+
+Probability < 0.5
+→ Background
+
+但 0.5 只是最常见的默认值，并不能保证它对 BUSI 是最佳阈值。
+例如：
+threshold = 0.3
+0.4
+0.5
+0.6
+0.7
+
+可能得到：
+0.3 → Dice 0.70
+0.4 → Dice 0.73
+0.5 → Dice 0.72
+0.6 → Dice 0.68
+
+如果：
+0.4
+
+最好，那么以后正式预测应该考虑 0.4。
+但是这里有一个实验规范非常重要：
+阈值只能在 Validation Set 上选择，不能拿 Test Set 调阈值。
+
+否则相当于：
+偷看考试答案
+
+Test Set 就不再是真正独立测试集了。
+所以正确流程：
+Validation Set
+↓
+寻找最佳 threshold
+↓
+比如 threshold = 0.45
+↓
+固定 threshold
+↓
+只在最后用一次 Test Set
+
+## 接下来的计划
+Step 1
+best_model.pt
+↓
+加载最佳模型 Epoch 38
+
+Step 2
+Validation Set
+↓
+测试不同 threshold
+
+Step 3
+确定最佳 threshold
+
+Step 4
+固定 threshold
+
+Step 5
+Test Set
+↓
+每张图计算 Dice / IoU
+
+Step 6
+生成 per_sample_metrics.csv
+
+Step 7
+分别统计：
+Overall
+Benign / Malignant
+Small / Medium / Large
+
+Step 8
+找出：
+Best cases
+Median cases
+Worst cases
+
+Step 9
+重新画预测结果
+
+Step 10
+分析失败原因
