@@ -9,7 +9,8 @@ import segmentation_models_pytorch as smp
 
 def build_resunet18(
     in_channels=1,
-    classes=1
+    classes=1,
+    encoder_weights="imagenet"
 ):
     """
     构建 ResNet18-U-Net。
@@ -46,7 +47,7 @@ def build_resunet18(
         encoder_name="resnet18",
 
         # 使用 ImageNet 预训练权重
-        encoder_weights="imagenet",
+        encoder_weights=encoder_weights,
 
         # BUSI 是灰度超声图
         in_channels=in_channels,
@@ -70,7 +71,8 @@ def build_resunet18(
 
 def build_attention_resunet18(
     in_channels=1,
-    classes=1
+    classes=1,
+    encoder_weights="imagenet"
 ):
     """
     构建 Attention ResNet18-U-Net。
@@ -110,7 +112,7 @@ def build_attention_resunet18(
 
         encoder_name="resnet18",
 
-        encoder_weights="imagenet",
+        encoder_weights=encoder_weights,
 
         in_channels=in_channels,
 

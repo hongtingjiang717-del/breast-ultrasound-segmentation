@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 
 from torch.utils.data import DataLoader
 
-from src.dataset import BUSIDataset
-from src.model import UNet
+from dataset import BUSIDataset
+from model import UNet
 
 
 # ==========================================

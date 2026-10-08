@@ -163,7 +163,7 @@ class BUSIDataset(Dataset):
         self,
         csv_file,
         image_size=(256, 256),
-        data_root=None，
+        data_root=None,
         transform=None
     ):
         """
@@ -203,6 +203,7 @@ class BUSIDataset(Dataset):
             if data_root is not None
             else None
         )
+        #保存albumentations数据增强
         self.transform = transform
 
         # -----------------------------
@@ -274,116 +275,100 @@ class BUSIDataset(Dataset):
 
         return image_path
 
-    def __getitem__(self, idx):
-        """
-        获取第 index 个样本。
+    def __getitem__(
+        self,
+        idx
+    ):
 
-        最终返回：
-
-        {
-            image: [1, 256, 256],
-            mask:  [1, 256, 256],
-            ...
-        }
-        """
-
-        # ==================================================
-        # 1. 取出当前样本信息
-        # ==================================================
+        # ======================================================
+        # 1. 从 CSV 中取得第 idx 个样本
+        # ======================================================
 
         row = self.df.iloc[idx]
+
+
+        # ======================================================
+        # 2. 得到当前环境下真正的图像路径
+        # ======================================================
 
         image_path = self._resolve_image_path(
             row
         )
 
-        # ==================================================
-        # 2. 自动寻找 mask
-        # ==================================================
+
+        # ======================================================
+        # 3. 自动寻找当前超声图像对应的所有 Mask
+        # ======================================================
 
         mask_paths = find_mask_paths(
             image_path
         )
 
 
-        # 理论上昨天我们已经检查：
-        #
-        # Missing masks = 0
-        #
-        # 所以正常情况下这里一定 >= 1。
         if len(mask_paths) == 0:
 
             raise FileNotFoundError(
-                f"没有找到 mask：{image_path}"
+                f"No mask found for image: {image_path}"
             )
 
 
-        # ==================================================
-        # 3. 读取超声图像
-        # ==================================================
+        # ======================================================
+        # 4. 读取灰度超声图像
+        #
+        # convert("L")
+        # 表示转成单通道灰度图
+        # ======================================================
 
         image = Image.open(
             image_path
-        ).convert("L")
+        ).convert(
+            "L"
+        )
 
 
-        # ==================================================
-        # 4. 合并多个 mask
-        # ==================================================
+        # PIL Image → NumPy
+        #
+        # shape:
+        # [H, W]
+        image_array = np.array(
+            image,
+            dtype=np.uint8
+        )
+
+
+        # ======================================================
+        # 5. 合并所有 Mask
+        #
+        # merged_mask:
+        # [H, W]
+        #
+        # 值：
+        # 0 = 背景
+        # 1 = 病灶
+        # ======================================================
 
         merged_mask = load_merged_mask(
             mask_paths
         )
 
-        # 当前 merged_mask 是 numpy 数组
-        #
-        # 转回 PIL，
-        # 后面方便进行 resize。
-        #
-        # 目前值为：
-        # 0 / 1
-        #
-        # 乘 255 后变成：
-        # 0 / 255
-        mask = Image.fromarray(
-            merged_mask * 255
-        )
 
-        # ==========================================
-        # Albumentations 数据增强
-        # ==========================================
+        # ======================================================
+        # 6. 数据增强
+        # ======================================================
 
-        if self.transform is  None:
-            # ==================================================
-            # 5. Resize image
-            # ==================================================
+        if self.transform is not None:
 
-            # 原图是连续灰度图，
-            # 使用双线性插值。
-            image = image.resize(
-                self.image_size,
-                resample=Image.Resampling.BILINEAR
-            )
-
-
-            # ==================================================
-            # 6. Resize mask
-            # ==================================================
-
-            # mask 是离散标签，
-            # 使用最近邻插值。
-            mask = mask.resize(
-                self.image_size,
-                resample=Image.Resampling.NEAREST
-            )
-
-        else:
+            # Albumentations 最重要的特点：
+            #
+            # image 和 mask 一起传进去
+            # 因此旋转、翻转、缩放等空间变化会保持同步。
             transformed = self.transform(
 
                 image=image_array,
 
                 mask=merged_mask
             )
+
 
             image_array = transformed[
                 "image"
@@ -393,83 +378,154 @@ class BUSIDataset(Dataset):
                 "mask"
             ]
 
-        # ==================================================
-        # 7. PIL → numpy
-        # ==================================================
 
-        image = np.array(
-            image,
-            dtype=np.float32
+        # ======================================================
+        # 7. 如果没有使用 Albumentations
+        #
+        # 继续保留原来的 Resize
+        # ======================================================
+
+        else:
+
+            # -----------------------------
+            # Image：
+            # Bilinear interpolation
+            # -----------------------------
+
+            image_pil = Image.fromarray(
+                image_array
+            )
+
+            image_pil = image_pil.resize(
+                self.image_size,
+                Image.Resampling.BILINEAR
+            )
+
+
+            # -----------------------------
+            # Mask：
+            # Nearest interpolation
+            # -----------------------------
+
+            mask_pil = Image.fromarray(
+                (
+                    merged_mask * 255
+                ).astype(
+                    np.uint8
+                )
+            )
+
+            mask_pil = mask_pil.resize(
+                self.image_size,
+                Image.Resampling.NEAREST
+            )
+
+
+            image_array = np.array(
+                image_pil,
+                dtype=np.float32
+            )
+
+
+            merged_mask = (
+                np.array(
+                    mask_pil
+                )
+                > 127
+            ).astype(
+                np.float32
+            )
+
+
+        # ======================================================
+        # 8. Image 转 float32
+        # ======================================================
+
+        image_array = image_array.astype(
+            np.float32
         )
 
-        mask = np.array(
-            mask,
-            dtype=np.float32
+
+        # ======================================================
+        # 9. 图像归一化到 [0, 1]
+        # ======================================================
+
+        image_array = (
+            image_array
+            /
+            255.0
         )
 
 
-        # ==================================================
-        # 8. image 归一化
-        # ==================================================
+        # ======================================================
+        # 10. Mask 再次保证严格二值化
+        #
+        # 数据增强以后可能数据类型发生变化，
+        # 所以这里重新保险处理一次。
+        # ======================================================
 
-        # 0~255
+        merged_mask = (
+            merged_mask > 0.5
+        ).astype(
+            np.float32
+        )
+
+
+        # ======================================================
+        # 11. NumPy → PyTorch Tensor
+        #
+        # 当前：
+        #
+        # image:
+        # [256,256]
+        #
+        # mask:
+        # [256,256]
+        # ======================================================
+
+        image_tensor = torch.from_numpy(
+            image_array
+        )
+
+        mask_tensor = torch.from_numpy(
+            merged_mask
+        )
+
+
+        # ======================================================
+        # 12. 增加 Channel 维度
+        #
+        # [H,W]
         #
         # ↓
         #
-        # 0~1
-        image = image / 255.0
+        # [1,H,W]
+        # ======================================================
 
-
-        # ==================================================
-        # 9. mask 二值化
-        # ==================================================
-
-        mask = (
-            mask > 127
-        ).astype(np.float32)
-
-
-        # ==================================================
-        # 10. numpy → Tensor
-        # ==================================================
-
-        image = torch.from_numpy(
-            image
+        image_tensor = image_tensor.unsqueeze(
+            0
         )
 
-        mask = torch.from_numpy(
-            mask
+        mask_tensor = mask_tensor.unsqueeze(
+            0
         )
 
 
-        # ==================================================
-        # 11. 添加 channel 维度
-        # ==================================================
-
-        # [256, 256]
-        #
-        # ↓
-        #
-        # [1, 256, 256]
-
-        image = image.unsqueeze(0)
-
-        mask = mask.unsqueeze(0)
-
-
-        # ==================================================
-        # 12. 返回
-        # ==================================================
+        # ======================================================
+        # 13. 返回
+        # ======================================================
 
         return {
 
-            "image": image,
+            "image":
+                image_tensor,
 
-            "mask": mask,
+            "mask":
+                mask_tensor,
 
-            "image_path": str(image_path),
+            "image_path":
+                str(image_path),
 
-            # 这里返回当前图像到底有几个 mask，
-            # 后面调试会比较方便。
-            "num_masks": len(mask_paths)
+            "num_masks":
+                len(mask_paths)
         }

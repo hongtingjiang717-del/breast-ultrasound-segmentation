@@ -1,6 +1,10 @@
+torch
+torchvision
+segmentation_models_pytorch==0.5.0
+albumentations==2.0.8
+opencv-python
 numpy
 pandas
-Pillow
 matplotlib
-scikit-learn
-tqdm
+Pillow
+gradio==6.29.1
