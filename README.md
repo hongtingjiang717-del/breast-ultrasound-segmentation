@@ -177,6 +177,7 @@ python app.py
 http://127.0.0.1:7860
 
 ## 9.Project Structure
+```
 breast-ultrasound-segmentation/
 │
 ├── README.md
@@ -214,6 +215,7 @@ breast-ultrasound-segmentation/
         ├── model_comparison.csv
         ├── per_sample_model_comparison.csv
         └── selected_cases.csv
+```
 核心模块：
 - dataset.py：BUSI 图像及多 Mask 合并
 - model.py：Scratch U-Net
