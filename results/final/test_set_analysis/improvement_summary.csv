@@ -1,0 +1,3 @@
+Comparison,Mean Dice Change,Median Dice Change,Positive Cases,Negative Cases,No Change Cases
+ResNet18-U-Net - U-Net,0.13269586274489797,0.066127986,78,19,1
+Attention-ResNet18-U-Net - ResNet18-U-Net,-0.035016561683621224,0.0020066800000000003,52,46,0

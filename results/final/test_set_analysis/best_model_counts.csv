@@ -1,0 +1,4 @@
+Model,Number of test cases
+U-Net,13
+ResNet18-U-Net,40
+Attention-ResNet18-U-Net,45

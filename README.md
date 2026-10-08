@@ -131,6 +131,7 @@ Attention 并未继续提高整体泛化性能。
 更复杂的 Attention 模块并不一定带来额外收益，
 预训练视觉表征的收益更加稳定。
 
+
 ## 7.Case-level Analysis
 除了整体 Dice / IoU，本项目进一步对 Test Set 进行逐病例比较。
 Case 1 — ResNet18-U-Net Rescue Case
@@ -197,6 +198,7 @@ breast-ultrasound-segmentation/
 │   └── compare_predictions.py
 │   ├── plot_history.py
 │   ├── visualize_predictions.py
+│   ├── analyze_test_results.py
 │   └── evaluate.py
 │
 ├── data/
@@ -212,9 +214,10 @@ breast-ultrasound-segmentation/
 │
 └── results/
     └── final/
-        ├── model_comparison.csv
-        ├── per_sample_model_comparison.csv
-        └── selected_cases.csv
+        ├── prediction_analysis
+        ├── test_set_analysis
+        ├── demo
+        └── figure
 ```
 核心模块：
 - dataset.py：BUSI 图像及多 Mask 合并
@@ -245,3 +248,30 @@ scSE Attention 未在当前数据规模下获得额外收益。
 ## 12. Disclaimer
 This project is intended for research, education and engineering demonstration only.
 The segmentation outputs must not be used for clinical diagnosis or treatment decisions.
+
+## 13.补充结果
+前面整体的结果显示，相较 Scratch U-Net，ResNet18-U-Net（相比baseline同时引入了imagenet预训练编码器与数据增强，不能简单地归因为是预训练的结果）：
+- Mean Dice：0.6983 → 0.8310，提升 13.27 个百分点
+- Mean IoU：0.5795 → 0.7377，提升 15.82 个百分点
+- Dice 标准差由 0.2363 降低至 0.1691
+说明 ResNet18-U-Net 不仅取得了更高的平均分割精度，同时病例间性能波动更小，表现出更好的整体稳定性。
+针对于98张测试集的结果进行统计，我们发现：
+### （1）整体结果分析
+![alt text](dice_boxplot.png)
+![alt text](iou_boxplot.png)
+从上面两张图我们可以看到ResNet18-U-Net相比Scratch U-Net、Attention-ResNet18-U-Net来说，整体结果相对比较好的：dice和iou系数相对比较高；并且低分数病例数量较少
+### （2）Baseline → ResNet 是否有效？
+![alt text](resnet_vs_unet_dice_difference.png)
+ 在 98 个独立测试病例中，ResNet18-U-Net 在 78 个病例上的 Dice
+高于 Scratch U-Net，Mean per-case Dice gain 为 +0.133。
+### （3）attention是否进一步有效？
+![alt text](attention_vs_resnet_dice_difference.png)
+![alt text](best_model_counts-1.png)
+ Attention-ResNet18-U-Net 在 52 个病例上优于 ResNet18-U-Net，但是为什么Attention-ResNet18-U-Net最后的结果不好呢？是因为attention模型表现出更大的病例间异质性，少数严重退化的病例导致mean dice下降至低于resnet的水平。
+### （4）attention的性能下降具有明显的尺度相关特征
+![alt text](dice_by_size_group.png)
+   在 small 和 medium lesion 中，Attention 模型仍具有竞争力；
+但在 large lesion 中，其平均 Dice 明显低于 ResNet18-U-Net。
+### （5）疾病类型也有差异，按照良性和恶性的类别分类
+![alt text](dice_by_class.png)
+结果也是ResNet18-U-Net的结果相对于Attention-ResNet18-U-Net比较差。
