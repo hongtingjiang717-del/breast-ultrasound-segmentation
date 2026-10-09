@@ -4,6 +4,7 @@
 
 from pathlib import Path
 
+import itertools
 import argparse
 import random
 
@@ -21,6 +22,166 @@ from src.loss import DiceBCELoss
 from src.metrics import segmentation_metrics
 
 
+#设置optimizer,
+def build_optimizer(
+    model,
+    model_name,
+    encoder_lr,
+    decoder_lr,
+    weight_decay=1e-4,
+    lr_mode="differential"
+):
+    """
+    为不同模型构建 AdamW optimizer。代替之前的adam优化器，这个优化器把梯度更新和weight decay处理的更清楚
+    参数
+    ----------
+    model:
+        当前分割模型。
+
+    model_name:
+        unet
+        resunet18
+        attention_resunet18
+
+    encoder_lr:
+        预训练 Encoder 的学习率。
+
+    decoder_lr:
+        Decoder + segmentation head 的学习率。
+
+    weight_decay:
+        AdamW 的权重衰减。
+
+    lr_mode:
+        "shared"
+            所有参数使用相同学习率。
+
+        "differential"
+            Encoder 和 Decoder 使用不同学习率。
+    """
+
+    # ======================================================
+    # Scratch U-Net
+    #
+    # 没有 ImageNet pretrained encoder，
+    # 所以不做 differential learning rate。
+    # ======================================================
+
+    if model_name == "unet":
+
+        optimizer = torch.optim.AdamW(
+
+            model.parameters(),
+
+            lr=decoder_lr,
+
+            weight_decay=weight_decay
+        )
+
+        return optimizer
+
+
+    # ======================================================
+    # ResNet18-U-Net / Attention-ResNet18-U-Net
+    #
+    # segmentation_models_pytorch 的 U-Net 结构中：
+    #
+    # model.encoder
+    # model.decoder
+    # model.segmentation_head
+    #
+    # 可以直接拿出来分组。
+    # ======================================================
+
+    if lr_mode == "shared":
+
+        optimizer = torch.optim.AdamW(
+
+            model.parameters(),
+
+            lr=decoder_lr,
+
+            weight_decay=weight_decay
+        )
+
+
+    elif lr_mode == "differential":
+
+        # --------------------------------------------------
+        # 参数组 1：
+        # ImageNet pretrained Encoder
+        #
+        # 学习率较小
+        # --------------------------------------------------
+
+        encoder_parameters = (
+            model.encoder.parameters()
+        )
+
+
+        # --------------------------------------------------
+        # 参数组 2：
+        # Decoder + Segmentation Head
+        #
+        # 学习率较大
+        #
+        # Attention-ResUNet 的 scSE 模块本身就在
+        # decoder 中，因此自动包含在这里。
+        # --------------------------------------------------
+
+        decoder_parameters = list(
+            model.decoder.parameters()
+        )
+
+        segmentation_head_parameters = list(
+            model.segmentation_head.parameters()
+        )
+
+
+        optimizer = torch.optim.AdamW(
+
+            [
+
+                {
+                    "params":
+                        encoder_parameters,
+
+                    "lr":
+                        encoder_lr,
+
+                    "name":
+                        "encoder"
+                },
+
+                {
+                    "params":
+                        (
+                            decoder_parameters
+                            +
+                            segmentation_head_parameters
+                        ),
+
+                    "lr":
+                        decoder_lr,
+
+                    "name":
+                        "decoder"
+                }
+
+            ],
+
+            weight_decay=weight_decay
+        )
+
+
+    else:
+
+        raise ValueError(
+            f"Unknown lr_mode: {lr_mode}"
+        )
+
+
+    return optimizer
 # ==========================================================
 # 1. 固定随机种子
 # ==========================================================
@@ -289,15 +450,57 @@ def main(args):
     # ======================================================
     # Optimizer
     # ======================================================
+    optimizer = build_optimizer(
 
-    optimizer = optim.Adam(
-        model.parameters(),
+        model=model,
 
-        lr=args.lr,
+        model_name=args.model,
 
-        weight_decay=1e-4
+        encoder_lr=args.encoder_lr,
+
+        decoder_lr=args.decoder_lr,
+
+        weight_decay=args.weight_decay,
+
+        lr_mode=args.lr_mode
     )
+    # ==========================================================
+    # Learning Rate Scheduler
+    # ==========================================================
+    #
+    # 我们监控 Validation Dice。
+    #
+    # 如果连续几轮 Val Dice 不提高，
+    # 自动降低所有 parameter group 的学习率。
+    #
+    # 注意：
+    # 对 differential LR 来说：
+    #
+    # Encoder: 1e-4
+    # Decoder: 3e-4
+    #
+    # 如果 factor = 0.5
+    #
+    # ↓
+    #
+    # Encoder: 5e-5
+    # Decoder: 1.5e-4
+    #
+    # 所以二者比例仍然保持 1:3。
+    # ==========================================================
 
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+
+        optimizer,
+
+        mode="max",
+
+        factor=args.lr_factor,
+
+        patience=args.lr_patience,
+
+        min_lr=1e-7
+    )
 
     # ======================================================
     # 保存训练结果
@@ -469,25 +672,100 @@ def main(args):
             f"Val IoU:    {val_iou:.4f}\n"
         )
 
+        scheduler.step(
+            val_dice
+        )
+        current_lrs = [
 
+            param_group["lr"]
+
+            for param_group
+            in optimizer.param_groups
+
+        ]
+        if len(current_lrs) == 1:
+
+            print(
+                f"Current LR: "
+                f"{current_lrs[0]:.2e}"
+            )
+
+        else:
+
+            print(
+                f"Encoder LR: "
+                f"{current_lrs[0]:.2e} | "
+                f"Decoder LR: "
+                f"{current_lrs[1]:.2e}"
+            )
         # ==================================================
         # 保存历史记录
         # ==================================================
 
+        # history.append(
+        #     {
+        #         "epoch": epoch + 1,
+
+        #         "train_loss": train_loss,
+
+        #         "val_loss": val_loss,
+
+        #         "val_dice": val_dice,
+
+        #         "val_iou": val_iou
+        #     }
+        # )
         history.append(
             {
                 "epoch": epoch + 1,
-
                 "train_loss": train_loss,
-
                 "val_loss": val_loss,
-
                 "val_dice": val_dice,
-
                 "val_iou": val_iou
             }
         )
+        current_lrs = [
 
+            group["lr"]
+
+            for group
+            in optimizer.param_groups
+
+        ]
+        history_row = {
+
+            "epoch":
+                epoch + 1,
+
+            "train_loss":
+                train_loss,
+
+            "val_loss":
+                val_loss,
+
+            "val_dice":
+                val_dice,
+
+            "val_iou":
+                val_iou
+        }
+        if len(current_lrs) == 1:
+
+            history_row[
+                "learning_rate"
+            ] = current_lrs[0]
+        else:
+
+            history_row[
+                "encoder_lr"
+            ] = current_lrs[0]
+
+            history_row[
+                "decoder_lr"
+            ] = current_lrs[1]
+        history.append(
+            history_row
+        )
 
         # 每个 Epoch 都保存一次 CSV
         pd.DataFrame(
@@ -559,6 +837,7 @@ def main(args):
             )
 
             break
+
 
 
     # ======================================================
@@ -703,11 +982,77 @@ if __name__ == "__main__":
 
 
     parser.add_argument(
-        "--lr",
+
+        "--lr_mode",
+
+        type=str,
+
+        default="differential",
+
+        choices=[
+            "shared",
+            "differential"
+        ],
+
+        help=(
+            "shared: same LR for all parameters; "
+            "differential: smaller encoder LR "
+            "and larger decoder LR"
+        )
+    )
+    parser.add_argument(
+
+        "--encoder_lr",
+
         type=float,
+
+        default=1e-4,
+
+        help="Initial LR for pretrained encoder"
+    )
+    parser.add_argument(
+
+        "--decoder_lr",
+
+        type=float,
+
+        default=3e-4,
+
+        help="Initial LR for decoder and segmentation head"
+    )
+    parser.add_argument(
+
+        "--weight_decay",
+
+        type=float,
+
         default=1e-4
     )
+    parser.add_argument(
 
+        "--lr_factor",
+
+        type=float,
+
+        default=0.5,
+
+        help=(
+            "ReduceLROnPlateau LR reduction factor"
+        )
+    )
+    parser.add_argument(
+
+        "--lr_patience",
+
+        type=int,
+
+        default=3,
+
+        help=(
+            "Number of plateau epochs before "
+            "reducing LR"
+        )
+    )
 
     parser.add_argument(
         "--patience",
